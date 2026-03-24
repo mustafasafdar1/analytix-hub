@@ -64,6 +64,7 @@ function Home() {
         </div>
         <div className="navbar-links">
           <button className="navbar-link active">Upload</button>
+          <button className="navbar-link" onClick={() => navigate('/history')}>History</button>
         </div>
       </nav>
 
