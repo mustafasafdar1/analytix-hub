@@ -2,6 +2,43 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 function ReportDownload({ data }) {
+  const generateStory = (data) => {
+    let story = [];
+    const efficiency = ((data.cleanedRows / (data.originalRows || 1)) * 100).toFixed(1);
+    
+    story.push(`The dataset "${data.filename}" initially contained ${data.originalRows} records. After a rigorous automated cleaning process, ${data.originalRows - data.cleanedRows} invalid records were removed.`);
+    
+    if (data.nullsRemoved > 0 || data.duplicatesRemoved > 0) {
+      story.push(`This included the stripping of ${data.nullsRemoved} missing/null elements and the removal of ${data.duplicatesRemoved} duplicate entries. The resulting dataset retains ${data.cleanedRows} high-quality rows across ${data.columns.length} columns (a ${efficiency}% retention rate).`);
+    } else {
+      story.push(`The data was already in excellent health, retaining 100% of its initial volume across ${data.columns.length} distinct columns.`);
+    }
+
+    const numCols = (data.columns || []).filter(c => data.columnTypes[c] === 'numeric' && data.statistics[c]?.count > 0);
+    if (numCols.length > 0) {
+      story.push(`\nNumerical Insights:`);
+      numCols.slice(0, 4).forEach(col => {
+        const stat = data.statistics[col];
+        story.push(`• For "${col}", values average around ${stat.mean}. The distribution spans from a minimum of ${stat.min} to a peak of ${stat.max}, with a median midpoint of ${stat.median}.`);
+      });
+    }
+
+    const catCols = (data.columns || []).filter(c => data.columnTypes[c] === 'categorical' && data.statistics[c]?.topValues?.length > 0);
+    if (catCols.length > 0) {
+      story.push(`\nCategorical Insights:`);
+      catCols.slice(0, 4).forEach(col => {
+        const stat = data.statistics[col];
+        const top = stat.topValues[0];
+        story.push(`• In the "${col}" category, there are ${stat.unique} unique classifications. The most dominant grouping is "${top.value}", appearing ${top.count} times.`);
+      });
+    }
+    
+    story.push(`\nConclusion:`);
+    story.push(`Overall, the data profiling indicates a coherent structure. The dataset is now completely sanitized and primed for advanced predictive modeling, business intelligence visualizations, or immediate downstream operational use.`);
+    
+    return story;
+  };
+
   const generatePDF = () => {
     try {
       const doc = new jsPDF();
@@ -40,8 +77,40 @@ function ReportDownload({ data }) {
         styles: { fontSize: 10 }
       });
 
+      // Executive Summary (Data Story)
+      doc.addPage();
+      doc.setFontSize(22);
+      doc.setTextColor(108, 92, 231);
+      doc.text('Executive Summary', 14, 25);
+      
+      doc.setFontSize(11);
+      doc.setTextColor(60);
+      const storyLines = generateStory(data);
+      let currentY = 40;
+      
+      storyLines.forEach(line => {
+        // Handle bolding for headers
+        if (line.startsWith('\n')) {
+          currentY += 8;
+          doc.setFont(undefined, 'bold');
+          doc.setTextColor(40);
+          line = line.replace('\n', '');
+        } else if (line.startsWith('•')) {
+          doc.setFont(undefined, 'normal');
+          doc.setTextColor(80);
+        } else {
+          doc.setFont(undefined, 'normal');
+          doc.setTextColor(60);
+        }
+
+        const splitText = doc.splitTextToSize(line, pageWidth - 28);
+        doc.text(splitText, 14, currentY);
+        currentY += (splitText.length * 6) + 4;
+      });
+
       // Column Statistics
-      let yPos = doc.lastAutoTable.finalY + 15;
+      doc.addPage();
+      let yPos = 20;
       doc.setFontSize(16);
       doc.setTextColor(40);
       doc.text('Column Statistics', 14, yPos);
