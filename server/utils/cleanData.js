@@ -76,16 +76,34 @@ function cleanCSV(csvString) {
     columnTypes[col] = numericCount > sampleValues.length * 0.7 ? 'numeric' : 'categorical';
   });
 
-  // Cast numeric columns
-  rows = rows.map((row) => {
+  // Cast numeric columns and ensure we don't end up with numeric NaNs
+  const validRows = [];
+  let invalidNumericCount = 0;
+
+  rows.forEach((row) => {
     const casted = { ...row };
+    let hasInvalid = false;
+    
     columns.forEach((col) => {
       if (columnTypes[col] === 'numeric' && casted[col] !== null) {
-        casted[col] = Number(casted[col]);
+        const num = Number(casted[col]);
+        if (Number.isNaN(num)) {
+          hasInvalid = true;
+        } else {
+          casted[col] = num;
+        }
       }
     });
-    return casted;
+
+    if (hasInvalid) {
+      invalidNumericCount++;
+    } else {
+      validRows.push(casted);
+    }
   });
+
+  nullsRemoved += invalidNumericCount;
+  rows = validRows;
 
   // --- 6. Compute statistics ---
   const statistics = {};

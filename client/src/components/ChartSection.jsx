@@ -49,31 +49,44 @@ function ChartSection({ columns, columnTypes, statistics, cleanedData }) {
       );
     }
 
-    if (stat.type === 'numeric' && stat.count > 0) {
-      // Area chart for numeric distribution (sample first 100 data points)
-      const sampleData = cleanedData.slice(0, 100).map((row, i) => ({
-        index: i + 1,
-        value: Number(row[col]) || 0
+    if (stat.type === 'numeric' && stat.count >= 2) {
+      // Create Histogram buckets for numeric distribution
+      const range = Math.max(0.0001, stat.max - stat.min);
+      const bucketCount = Math.min(10, stat.count);
+      const bucketSize = range / bucketCount;
+      const buckets = Array.from({ length: bucketCount }, (_, i) => ({
+        name: `${(stat.min + i * bucketSize).toFixed(1)} - ${(stat.min + (i + 1) * bucketSize).toFixed(1)}`,
+        count: 0
       }));
 
+      cleanedData.forEach((row) => {
+        const val = Number(row[col]);
+        if (Number.isNaN(val) || val === null || val === undefined) return;
+        let idx = Math.floor((val - stat.min) / bucketSize);
+        if (idx >= bucketCount) idx = bucketCount - 1;
+        if (idx < 0) idx = 0;
+        buckets[idx].count++;
+      });
+
       charts.push(
-        <div className="chart-card" key={`num-${col}`}>
-          <h4>{col}</h4>
+        <div className="chart-card" key={`histogram-${col}`}>
+          <h4>{col} — Distribution</h4>
           <p className="chart-subtitle">
             Mean: {stat.mean} • Median: {stat.median} • Min: {stat.min} • Max: {stat.max}
           </p>
           <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={sampleData} margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
-              <defs>
-                <linearGradient id={`grad-${col}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6c5ce7" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#6c5ce7" stopOpacity={0} />
-                </linearGradient>
-              </defs>
+            <BarChart data={buckets} margin={{ top: 10, right: 10, bottom: 20, left: 10 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-              <XAxis dataKey="index" tick={{ fill: '#9a9ab0', fontSize: 11 }} />
+              <XAxis 
+                dataKey="name" 
+                tick={{ fill: '#9a9ab0', fontSize: 10 }} 
+                angle={-25} 
+                textAnchor="end" 
+                height={50} 
+              />
               <YAxis tick={{ fill: '#9a9ab0', fontSize: 11 }} />
               <Tooltip
+                cursor={{ fill: 'rgba(255,255,255,0.05)' }}
                 contentStyle={{
                   background: '#1a1a3e',
                   border: '1px solid rgba(255,255,255,0.1)',
@@ -82,71 +95,11 @@ function ChartSection({ columns, columnTypes, statistics, cleanedData }) {
                   fontSize: 13
                 }}
               />
-              <Area
-                type="monotone"
-                dataKey="value"
-                stroke="#6c5ce7"
-                strokeWidth={2}
-                fill={`url(#grad-${col})`}
-              />
-            </AreaChart>
+              <Bar dataKey="count" fill="#00cec9" radius={[4, 4, 0, 0]} />
+            </BarChart>
           </ResponsiveContainer>
         </div>
       );
-
-      // Pie chart for numeric distribution buckets (if enough data)
-      if (stat.count >= 5) {
-        const range = stat.max - stat.min;
-        const bucketCount = 5;
-        const bucketSize = range / bucketCount;
-        const buckets = Array.from({ length: bucketCount }, (_, i) => ({
-          name: `${(stat.min + i * bucketSize).toFixed(1)} - ${(stat.min + (i + 1) * bucketSize).toFixed(1)}`,
-          count: 0
-        }));
-
-        cleanedData.forEach((row) => {
-          const val = Number(row[col]);
-          if (isNaN(val)) return;
-          let idx = Math.floor((val - stat.min) / bucketSize);
-          if (idx >= bucketCount) idx = bucketCount - 1;
-          if (idx < 0) idx = 0;
-          buckets[idx].count++;
-        });
-
-        charts.push(
-          <div className="chart-card" key={`pie-${col}`}>
-            <h4>{col} — Distribution</h4>
-            <p className="chart-subtitle">Value range distribution across {bucketCount} buckets</p>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={buckets}
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={100}
-                  dataKey="count"
-                  nameKey="name"
-                  label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-                >
-                  {buckets.map((_, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    background: '#1a1a3e',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: 8,
-                    color: '#f0f0ff',
-                    fontSize: 13
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: 11, color: '#9a9ab0' }} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        );
-      }
     }
   });
 

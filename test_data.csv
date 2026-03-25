@@ -1,0 +1,32 @@
+Name,Age,City,Salary,Department
+John,28,New York,75000,Engineering
+Jane,32,San Francisco,92000,Marketing
+null,25,Chicago,68000,Engineering
+Bob,NaN,Los Angeles,85000,Sales
+Alice,29,,71000,Marketing
+Charlie,35,New York,null,Engineering
+Diana,27,San Francisco,79000,HR
+Eve,31,Chicago,88000,Sales
+Frank,,New York,95000,Engineering
+Grace,28,Los Angeles,72000,Marketing
+John,28,New York,75000,Engineering
+Henry,NaN,Chicago,NaN,HR
+Ivy,26,San Francisco,81000,Sales
+Jack,33,New York,93000,Engineering
+Kate,29,Chicago,76000,Marketing
+Leo,null,Los Angeles,84000,Sales
+Mia,30,San Francisco,87000,HR
+Noah,34,New York,91000,Engineering
+Olivia,27,Chicago,73000,Marketing
+Pete,31,Los Angeles,89000,Sales
+,,,,
+Quinn,28,San Francisco,78000,Engineering
+Rachel,32,New York,94000,Marketing
+Sam,26,Chicago,70000,HR
+Tina,29,Los Angeles,82000,Sales
+Uma,33,San Francisco,96000,Engineering
+Victor,35,New York,90000,Marketing
+Wendy,N/A,Chicago,77000,HR
+Xavier,30,Los Angeles,86000,Sales
+Yara,28,San Francisco,80000,Engineering
+Zack,31,New York,92000,Marketing
