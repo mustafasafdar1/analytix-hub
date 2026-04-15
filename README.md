@@ -59,5 +59,10 @@ DataLens follows a traditional Client-Server architecture:
 4. **Visualization Layer**: React frontend reconstructs trends and distributions via Recharts.
 
 ---
+##Sreenshots 
+<img width="1879" height="828" alt="Screenshot 2026-04-15 154352" src="https://github.com/user-attachments/assets/907f45a5-33ad-46cf-88e1-4aefaa12b5b2" />
+<img width="1898" height="812" alt="Screenshot 2026-04-15 154338" src="https://github.com/user-attachments/assets/d5fbbfaf-7338-49e1-8fe0-998b370c27ad" />
+
 
 Built with ❤️ by [Mustafa Safdar](https://github.com/mustafasafdar1)
+
