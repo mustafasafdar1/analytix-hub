@@ -1,241 +1,312 @@
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { applyPlugin } from 'jspdf-autotable';
+applyPlugin(jsPDF);
 
 function ReportDownload({ data }) {
-  const generateStory = (data) => {
-    let story = [];
-    const efficiency = ((data.cleanedRows / (data.originalRows || 1)) * 100).toFixed(1);
-    
-    story.push(`The dataset "${data.filename}" initially contained ${data.originalRows} records. After a rigorous automated cleaning process, ${data.originalRows - data.cleanedRows} invalid records were removed.`);
-    
-    if (data.nullsRemoved > 0 || data.duplicatesRemoved > 0) {
-      story.push(`This included the stripping of ${data.nullsRemoved} missing/null elements and the removal of ${data.duplicatesRemoved} duplicate entries. The resulting dataset retains ${data.cleanedRows} high-quality rows across ${data.columns.length} columns (a ${efficiency}% retention rate).`);
-    } else {
-      story.push(`The data was already in excellent health, retaining 100% of its initial volume across ${data.columns.length} distinct columns.`);
-    }
+  const handleDownloadCSV = () => {
+    const cols = data.columns || [];
+    const rows = data.cleanedData || [];
+    let csv = cols.join(',') + '\n';
+    rows.forEach(row => {
+      csv += cols.map(col => {
+        const val = row[col];
+        if (val === null || val === undefined) return '';
+        const str = String(val);
+        return str.includes(',') || str.includes('"') ? `"${str.replace(/"/g, '""')}"` : str;
+      }).join(',') + '\n';
+    });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (data.filename || 'data').replace('.csv', '') + '_cleaned.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
-    const numCols = (data.columns || []).filter(c => data.columnTypes[c] === 'numeric' && data.statistics[c]?.count > 0);
-    if (numCols.length > 0) {
-      story.push(`\nNumerical Insights:`);
-      numCols.slice(0, 4).forEach(col => {
-        const stat = data.statistics[col];
-        story.push(`• For "${col}", values average around ${stat.mean}. The distribution spans from a minimum of ${stat.min} to a peak of ${stat.max}, with a median midpoint of ${stat.median}.`);
+  const addWrappedText = (doc, text, x, y, maxWidth, lineHeight = 6) => {
+    const paragraphs = (text || '').split('\n\n');
+    let currentY = y;
+    paragraphs.forEach(para => {
+      const trimmed = para.trim();
+      if (!trimmed) return;
+      const lines = doc.splitTextToSize(trimmed, maxWidth);
+      lines.forEach(line => {
+        if (currentY > doc.internal.pageSize.getHeight() - 25) {
+          doc.addPage();
+          currentY = 25;
+        }
+        doc.text(line, x, currentY);
+        currentY += lineHeight;
       });
-    }
-
-    const catCols = (data.columns || []).filter(c => data.columnTypes[c] === 'categorical' && data.statistics[c]?.topValues?.length > 0);
-    if (catCols.length > 0) {
-      story.push(`\nCategorical Insights:`);
-      catCols.slice(0, 4).forEach(col => {
-        const stat = data.statistics[col];
-        const top = stat.topValues[0];
-        story.push(`• In the "${col}" category, there are ${stat.unique} unique classifications. The most dominant grouping is "${top.value}", appearing ${top.count} times.`);
-      });
-    }
-    
-    story.push(`\nConclusion:`);
-    story.push(`Overall, the data profiling indicates a coherent structure. The dataset is now completely sanitized and primed for advanced predictive modeling, business intelligence visualizations, or immediate downstream operational use.`);
-    
-    return story;
+      currentY += 3;
+    });
+    return currentY;
   };
 
   const generatePDF = () => {
     try {
       const doc = new jsPDF();
-      const pageWidth = doc.internal.pageSize.getWidth();
+      const pw = doc.internal.pageSize.getWidth();
+      const ph = doc.internal.pageSize.getHeight();
+      const safeFilename = data?.filename || 'Data_Export.csv';
+      const analysis = data.analysis || {};
+      const margin = 14;
+      const textWidth = pw - margin * 2;
 
-      // Title
-      doc.setFontSize(22);
-      doc.setTextColor(108, 92, 231);
-      doc.text('DataLens Analysis Report', pageWidth / 2, 25, { align: 'center' });
+      // ===== PAGE 1: TITLE =====
+      doc.setFillColor(99, 102, 241);
+      doc.rect(0, 0, pw, 55, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(28);
+      doc.setFont(undefined, 'bold');
+      doc.text('AnalytixHub', pw / 2, 25, { align: 'center' });
+      doc.setFontSize(13);
+      doc.setFont(undefined, 'normal');
+      doc.text('Comprehensive Data Analysis Report', pw / 2, 36, { align: 'center' });
+      doc.setFontSize(10);
+      doc.text(safeFilename + '  |  ' + new Date().toLocaleDateString(), pw / 2, 47, { align: 'center' });
 
-      // Filename & date
-      doc.setFontSize(11);
-      doc.setTextColor(100);
-      const safeFilename = data?.filename ? data.filename : 'Data_Export.csv';
-      doc.text(`File: ${safeFilename}`, 14, 40);
-      doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 47);
+      doc.setTextColor(80);
+      doc.setFontSize(10);
+      doc.text('Quality Score: ' + (data.dataQualityScore || 0) + '/100', margin, 70);
+      doc.text('Records: ' + (data.originalRows || 0) + ' original -> ' + (data.cleanedRows || 0) + ' cleaned', margin, 78);
+      doc.text('Columns: ' + (data.columns?.length || 0) + '  |  Generated: ' + new Date().toLocaleString(), margin, 86);
 
-      // Cleaning Summary
-      doc.setFontSize(16);
-      doc.setTextColor(40);
-      doc.text('Data Cleaning Summary', 14, 62);
+      // Cleaning summary
+      doc.setFontSize(14);
+      doc.setTextColor(99, 102, 241);
+      doc.setFont(undefined, 'bold');
+      doc.text('Data Cleaning Summary', margin, 102);
 
-      autoTable(doc, {
-        startY: 67,
+      const eff = data.originalRows > 0 ? ((data.cleanedRows / data.originalRows) * 100).toFixed(1) : '100';
+      doc.autoTable({
+        startY: 108,
         head: [['Metric', 'Value']],
         body: [
           ['Original Rows', String(data.originalRows || 0)],
           ['Cleaned Rows', String(data.cleanedRows || 0)],
           ['Rows Removed', String((data.originalRows || 0) - (data.cleanedRows || 0))],
-          ['Null/NaN Values Removed', String(data.nullsRemoved || 0)],
+          ['Null/NaN Removed', String(data.nullsRemoved || 0)],
           ['Duplicates Removed', String(data.duplicatesRemoved || 0)],
-          ['Columns Detected', String(data.columns?.length || 0)]
+          ['Columns Analyzed', String(data.columns?.length || 0)],
+          ['Retention Rate', eff + '%'],
+          ['Data Quality Score', (data.dataQualityScore || 0) + '/100']
         ],
         theme: 'striped',
-        headStyles: { fillColor: [108, 92, 231] },
-        styles: { fontSize: 10 }
+        headStyles: { fillColor: [99, 102, 241], fontStyle: 'bold' },
+        styles: { fontSize: 10 },
+        margin: { left: margin, right: margin }
       });
 
-      // Executive Summary (Data Story)
+      // ===== PAGE 2: DESCRIPTIVE =====
       doc.addPage();
-      doc.setFontSize(22);
-      doc.setTextColor(108, 92, 231);
-      doc.text('Executive Summary', 14, 25);
-      
-      doc.setFontSize(11);
-      doc.setTextColor(60);
-      const storyLines = generateStory(data);
-      let currentY = 40;
-      
-      storyLines.forEach(line => {
-        // Handle bolding for headers
-        if (line.startsWith('\n')) {
-          currentY += 8;
-          doc.setFont(undefined, 'bold');
-          doc.setTextColor(40);
-          line = line.replace('\n', '');
-        } else if (line.startsWith('•')) {
-          doc.setFont(undefined, 'normal');
-          doc.setTextColor(80);
-        } else {
-          doc.setFont(undefined, 'normal');
-          doc.setTextColor(60);
-        }
+      doc.setFillColor(6, 214, 160);
+      doc.rect(0, 0, pw, 8, 'F');
+      doc.setFontSize(20);
+      doc.setTextColor(6, 214, 160);
+      doc.setFont(undefined, 'bold');
+      doc.text('1. Descriptive Analysis', margin, 25);
+      doc.setFontSize(10);
+      doc.setTextColor(120);
+      doc.setFont(undefined, 'italic');
+      doc.text('What happened in the data - key findings from statistical profiling', margin, 33);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(50);
+      doc.setFontSize(10);
+      addWrappedText(doc, analysis.descriptive || 'No descriptive analysis available.', margin, 44, textWidth);
 
-        const splitText = doc.splitTextToSize(line, pageWidth - 28);
-        doc.text(splitText, 14, currentY);
-        currentY += (splitText.length * 6) + 4;
-      });
-
-      // Column Statistics
+      // ===== PAGE 3: PREDICTIVE =====
       doc.addPage();
-      let yPos = 20;
+      doc.setFillColor(56, 189, 248);
+      doc.rect(0, 0, pw, 8, 'F');
+      doc.setFontSize(20);
+      doc.setTextColor(56, 189, 248);
+      doc.setFont(undefined, 'bold');
+      doc.text('2. Predictive Analysis', margin, 25);
+      doc.setFontSize(10);
+      doc.setTextColor(120);
+      doc.setFont(undefined, 'italic');
+      doc.text('What is likely to happen - forecasts and trends based on patterns', margin, 33);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(50);
+      doc.setFontSize(10);
+      addWrappedText(doc, analysis.predictive || 'No predictive analysis available.', margin, 44, textWidth);
+
+      // ===== PAGE 4: PRESCRIPTIVE =====
+      doc.addPage();
+      doc.setFillColor(244, 114, 182);
+      doc.rect(0, 0, pw, 8, 'F');
+      doc.setFontSize(20);
+      doc.setTextColor(244, 114, 182);
+      doc.setFont(undefined, 'bold');
+      doc.text('3. Prescriptive Analysis', margin, 25);
+      doc.setFontSize(10);
+      doc.setTextColor(120);
+      doc.setFont(undefined, 'italic');
+      doc.text('What actions to take - recommendations and next steps', margin, 33);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(50);
+      doc.setFontSize(10);
+      addWrappedText(doc, analysis.prescriptive || 'No prescriptive analysis available.', margin, 44, textWidth);
+
+      // ===== PAGE 5: COLUMN STATS =====
+      doc.addPage();
+      doc.setFillColor(99, 102, 241);
+      doc.rect(0, 0, pw, 8, 'F');
       doc.setFontSize(16);
       doc.setTextColor(40);
-      doc.text('Column Statistics', 14, yPos);
+      doc.setFont(undefined, 'bold');
+      doc.text('Column Statistics', margin, 25);
 
-      const colHeaders = ['Column', 'Type', 'Count', 'Mean', 'Median', 'Min', 'Max', 'Std'];
-      const colData = (data.columns || []).map((col) => {
-        const stat = data.statistics[col] || {};
-        const type = data.columnTypes[col] || 'unknown';
-        return [
-          col,
-          type,
-          String(stat.count ?? '—'),
-          stat.mean !== undefined ? String(stat.mean) : '—',
-          stat.median !== undefined ? String(stat.median) : '—',
-          stat.min !== undefined ? String(stat.min) : '—',
-          stat.max !== undefined ? String(stat.max) : '—',
-          stat.std !== undefined ? String(stat.std) : '—'
-        ];
+      const colData = (data.columns || []).map(col => {
+        const s = data.statistics?.[col] || {};
+        const t = data.columnTypes?.[col] || '?';
+        return [col, t, String(s.count ?? '-'), s.mean !== undefined ? String(s.mean) : '-', s.median !== undefined ? String(s.median) : '-', s.min !== undefined ? String(s.min) : '-', s.max !== undefined ? String(s.max) : '-', s.std !== undefined ? String(s.std) : '-', s.q1 !== undefined ? String(s.q1) : '-', s.q3 !== undefined ? String(s.q3) : '-'];
       });
 
-      autoTable(doc, {
-        startY: yPos + 5,
-        head: [colHeaders],
+      doc.autoTable({
+        startY: 32,
+        head: [['Column', 'Type', 'Count', 'Mean', 'Median', 'Min', 'Max', 'Std', 'Q1', 'Q3']],
         body: colData,
         theme: 'striped',
-        headStyles: { fillColor: [0, 206, 201] },
-        styles: { fontSize: 8 },
-        columnStyles: { 0: { fontStyle: 'bold' } }
+        headStyles: { fillColor: [6, 214, 160], fontStyle: 'bold' },
+        styles: { fontSize: 7.5 },
+        columnStyles: { 0: { fontStyle: 'bold' } },
+        margin: { left: margin, right: margin }
       });
 
-      // Categorical details
-      const categoricalCols = (data.columns || []).filter(
-        (col) => data.statistics[col]?.type === 'categorical' && data.statistics[col]?.topValues
-      );
-
-      if (categoricalCols.length > 0) {
-        let catY = doc.lastAutoTable.finalY + 15;
-
-        // Check if we need a new page
-        if (catY > 250) {
-          doc.addPage();
-          catY = 20;
-        }
-
-        doc.setFontSize(16);
+      // Outlier table
+      const outlierEntries = Object.entries(data.outlierSummary || {});
+      if (outlierEntries.length > 0) {
+        let oy = doc.lastAutoTable.finalY + 14;
+        if (oy > 240) { doc.addPage(); oy = 25; }
+        doc.setFontSize(14);
         doc.setTextColor(40);
-        doc.text('Categorical Column Details', 14, catY);
+        doc.setFont(undefined, 'bold');
+        doc.text('Outlier Analysis', margin, oy);
+        doc.autoTable({
+          startY: oy + 6,
+          head: [['Column', 'Outliers', '% of Data', 'Lower Bound', 'Upper Bound']],
+          body: outlierEntries.map(([col, info]) => [col, String(info.count), info.percentage + '%', String(info.bounds?.lower ?? '-'), String(info.bounds?.upper ?? '-')]),
+          theme: 'striped',
+          headStyles: { fillColor: [244, 114, 182] },
+          styles: { fontSize: 9 },
+          margin: { left: margin, right: margin }
+        });
+      }
 
-        categoricalCols.forEach((col) => {
+      // Correlation Matrix
+      const corrMatrix = data.correlationMatrix || {};
+      const numCols = (data.columns || []).filter(c => data.columnTypes?.[c] === 'numeric');
+      if (numCols.length >= 2 && Object.keys(corrMatrix).length > 0) {
+        doc.addPage();
+        doc.setFillColor(99, 102, 241);
+        doc.rect(0, 0, pw, 8, 'F');
+        doc.setFontSize(14);
+        doc.setTextColor(40);
+        doc.setFont(undefined, 'bold');
+        doc.text('Correlation Matrix', margin, 25);
+        const corrBody = numCols.map(r => [r, ...numCols.map(c => String(corrMatrix[r]?.[c] ?? '-'))]);
+        doc.autoTable({
+          startY: 32,
+          head: [['', ...numCols]],
+          body: corrBody,
+          theme: 'grid',
+          headStyles: { fillColor: [99, 102, 241], fontSize: 7 },
+          styles: { fontSize: 7, cellPadding: 2 },
+          columnStyles: { 0: { fontStyle: 'bold' } },
+          margin: { left: margin, right: margin }
+        });
+      }
+
+      // Categorical Details
+      const catCols = (data.columns || []).filter(c => data.statistics?.[c]?.type === 'categorical' && data.statistics?.[c]?.topValues);
+      if (catCols.length > 0) {
+        doc.addPage();
+        doc.setFillColor(251, 191, 36);
+        doc.rect(0, 0, pw, 8, 'F');
+        doc.setFontSize(14);
+        doc.setTextColor(40);
+        doc.setFont(undefined, 'bold');
+        doc.text('Categorical Breakdown', margin, 25);
+
+        let catY = 32;
+        catCols.forEach(col => {
           const stat = data.statistics[col];
-          catY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 10 : catY + 5;
-
-          if (catY > 260) {
-            doc.addPage();
-            catY = 20;
-          }
-
-          doc.setFontSize(12);
-          doc.text(`${col} (${stat.unique} unique values)`, 14, catY);
-
-          autoTable(doc, {
-            startY: catY + 3,
+          if (catY > 240) { doc.addPage(); catY = 25; }
+          doc.setFontSize(11);
+          doc.setFont(undefined, 'bold');
+          doc.setTextColor(60);
+          doc.text(col + ' (' + stat.unique + ' unique)', margin, catY);
+          doc.autoTable({
+            startY: catY + 4,
             head: [['Value', 'Count']],
-            body: stat.topValues.map((v) => [v.value, String(v.count)]),
+            body: stat.topValues.map(v => [v.value, String(v.count)]),
             theme: 'striped',
-            headStyles: { fillColor: [253, 121, 168] },
-            styles: { fontSize: 9 }
+            headStyles: { fillColor: [251, 191, 36], textColor: [40, 40, 40] },
+            styles: { fontSize: 9 },
+            margin: { left: margin, right: margin }
           });
+          catY = doc.lastAutoTable.finalY + 12;
         });
       }
 
       // Data Preview
-      if (data.cleanedData && data.cleanedData.length > 0) {
+      if (data.cleanedData?.length > 0) {
         doc.addPage();
-        doc.setFontSize(16);
+        doc.setFillColor(99, 102, 241);
+        doc.rect(0, 0, pw, 8, 'F');
+        doc.setFontSize(14);
         doc.setTextColor(40);
-        doc.text('Cleaned Data Preview (First 20 Rows)', 14, 20);
-
-        const previewData = data.cleanedData.slice(0, 20).map((row) =>
-          data.columns.map((col) => String(row[col] ?? ''))
-        );
-
-        autoTable(doc, {
-          startY: 25,
+        doc.setFont(undefined, 'bold');
+        doc.text('Cleaned Data Preview (First 25 Rows)', margin, 25);
+        const preview = data.cleanedData.slice(0, 25).map(row => (data.columns || []).map(c => String(row[c] ?? '')));
+        doc.autoTable({
+          startY: 32,
           head: [data.columns],
-          body: previewData,
+          body: preview,
           theme: 'striped',
-          headStyles: { fillColor: [108, 92, 231] },
-          styles: { fontSize: 7, cellPadding: 2 },
-          columnStyles: data.columns.reduce((acc, _, i) => {
-            acc[i] = { cellWidth: 'auto' };
-            return acc;
-          }, {})
+          headStyles: { fillColor: [99, 102, 241] },
+          styles: { fontSize: 6.5, cellPadding: 2 },
+          margin: { left: margin, right: margin }
         });
       }
 
-      // Footer
-      const pageCount = doc.internal.getNumberOfPages();
-      for (let i = 1; i <= pageCount; i++) {
+      // Footers
+      const pc = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= pc; i++) {
         doc.setPage(i);
-        doc.setFontSize(8);
+        doc.setFontSize(7);
         doc.setTextColor(150);
-        doc.text(
-          `DataLens Report • Page ${i} of ${pageCount}`,
-          pageWidth / 2,
-          doc.internal.pageSize.getHeight() - 10,
-          { align: 'center' }
-        );
+        doc.text('AnalytixHub Report  |  ' + safeFilename + '  |  Page ' + i + '/' + pc, pw / 2, ph - 8, { align: 'center' });
       }
 
-      doc.save(`DataLens_Report_${safeFilename.replace('.csv', '')}.pdf`);
+      // Save the PDF
+      doc.save('AnalytixHub_Report_' + safeFilename.replace('.csv', '') + '.pdf');
+
     } catch (err) {
-      console.error('Error generating PDF:', err);
-      alert('There was an error generating your PDF report. Check the console for details.');
+      console.error('PDF generation error:', err);
+      alert('Error generating PDF: ' + err.message);
     }
   };
 
   return (
     <div className="report-section">
-      <h3>📄 Download Analysis Report</h3>
-      <p>Get a comprehensive PDF report with cleaning summary, column statistics, and data preview.</p>
-      <button className="report-btn" onClick={generatePDF} id="download-report">
-        <span className="btn-icon">📥</span>
-        Download PDF Report
-      </button>
+      <h3>Export Your Analysis</h3>
+      <p>Download a comprehensive PDF report with descriptive, predictive and prescriptive analysis, or the cleaned CSV data.</p>
+      <div className="report-actions">
+        <button className="report-btn" onClick={generatePDF} id="download-report">
+          <span className="btn-icon">📥</span>
+          Download PDF Report
+        </button>
+        <button className="report-btn secondary" onClick={handleDownloadCSV} id="download-csv">
+          <span className="btn-icon">📊</span>
+          Download Cleaned CSV
+        </button>
+      </div>
     </div>
   );
 }

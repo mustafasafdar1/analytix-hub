@@ -7,11 +7,19 @@ const uploadSchema = new mongoose.Schema({
   nullsRemoved: { type: Number, default: 0 },
   duplicatesRemoved: { type: Number, default: 0 },
   emptyRowsRemoved: { type: Number, default: 0 },
+  conclusion: { type: String },
+  dataQualityScore: { type: Number, default: 0 },
   columns: [String],
   columnTypes: { type: Map, of: String },
   statistics: { type: mongoose.Schema.Types.Mixed },
+  correlationMatrix: { type: mongoose.Schema.Types.Mixed },
+  outlierSummary: { type: mongoose.Schema.Types.Mixed },
   cleanedData: { type: mongoose.Schema.Types.Mixed },
   createdAt: { type: Date, default: Date.now }
 });
+
+// Indexes for faster queries
+uploadSchema.index({ createdAt: -1 });
+uploadSchema.index({ filename: 1 });
 
 module.exports = mongoose.model('Upload', uploadSchema);
